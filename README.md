@@ -36,8 +36,9 @@ dsh plugin add github:ChrisLou-bioinfo/dsh-usage-lite
 
 ## 数据流
 
-1. 打开设置页 → 浏览器 `fetch /usage-lite/stats`。
-2. Host 检查索引（4s TTL 单飞行扫描）：`listSessions()` 对比持久化日志 mtime，只重读新增/变更
+1. 打开设置页 → 浏览器 `fetch /usage-lite/stats` → Host **立即返回内存中的聚合快照**（毫秒级），
+   同时在后台做变更检测（stale-while-revalidate）；仅首次安装索引为空时同步等待。
+2. 后台扫描（4s TTL 单飞行）：`listSessions()` 对比持久化日志 mtime，只重读新增/变更
    （live 会话每次都重读内存快照）。
 3. 增量索引快照落盘 `~/.dsh/usage-lite/index.json`（10s 节流，原子写，版本化，坏文件从空开始）。
 4. 响应聚合快照：`totals` / `days`（按天）/ `models`（按模型）/ `workspaces`（按工作区）/

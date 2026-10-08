@@ -10,6 +10,7 @@
 //
 // 增量索引：以持久化日志 mtime 为变更信号（live 会话每次都重读），
 // 快照持久化到 ~/.dsh/usage-lite/index.json。
+// 请求路径非阻塞：/stats 立即返回内存快照，变更检测在后台进行（stale-while-revalidate）。
 // 本文件是纯 Node ESM，无构建步骤，不依赖第三方包。
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -337,17 +338,16 @@ export function apply(ctx) {
     };
   }
 
-  let statsCache = null;
   const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 
   async function statsHandler(req, res) {
     if (loaded === false) await loadIndex();
-    await refresh(Date.now());
-    if (statsCache === null || Date.now() - statsCache.at >= SCAN_TTL_MS) {
-      statsCache = { at: Date.now(), payload: statsSnapshot() };
-    }
+    // 秒开：立即返回内存中已聚合的快照，后台异步做变更检测（mtime 比对 +
+    // 重读变更/live 会话），下一次请求即拿到新数据。仅首次安装索引为空时同步等待。
+    if (entries.size === 0) await refresh(Date.now());
+    else void refresh(Date.now());
     res.writeHead(200, JSON_HEADERS);
-    res.end(JSON.stringify(statsCache.payload));
+    res.end(JSON.stringify(statsSnapshot()));
   }
 
   ctx.effect(() => {
