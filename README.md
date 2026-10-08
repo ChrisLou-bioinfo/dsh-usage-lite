@@ -1,0 +1,67 @@
+# dsh-usage-lite · Token 用量统计插件
+
+跨**全部会话**统计 DeepSeek Harness (DSH) 的 token 总使用量，在设置面板新增「用量统计」页。
+无第三方依赖、无构建步骤、无网络调用——数据全部来自本地会话日志。
+
+A zero-dependency DSH plugin that aggregates token usage across **all sessions**
+and renders it as a settings page (totals, daily trend, per-model and per-workspace breakdown).
+
+## 功能
+
+- 汇总卡片：总 Tokens / 输入（未缓存）/ 缓存读（含命中率）/ 缓存写 / 输出（含推理）
+- 时间范围切换：7 天 / 30 天 / 全部
+- 按天用量柱状图、按模型排行、按工作区排行
+- 增量索引：首次全量扫描后只重读新增/变更的会话，快照持久化到 `~/.dsh/usage-lite/index.json`
+
+## 安装
+
+```bash
+dsh plugin add github:ChrisLou-bioinfo/dsh-usage-lite
+```
+
+装好后打开 **Settings → 用量统计**。
+
+适配 DSH `0.2.0-rc.2+`（desktop 与 web profile 均可）。手动挂载方式：
+在对应 profile 的 `cordis.patch.yml` 末尾加 `- insert:` 条目指向本包，仓库根目录的
+`cordis.patch.yml` 即为模板。
+
+## 统计口径
+
+- 数据源：`ctx.sessionQuery`（live 优先、持久化兜底），`readSession(id)` 读取全量事件。
+- 只统计 `assistant/message` 事件上 `data.usage` 且 `data.message.source.kind === "model"` 的样本
+  （流式 `assistant/attempt` 里的 usage 是过程值，忽略）。
+- **跳过 `inheritedEventCount` 之前的事件**：fork/resume 会话继承的父会话事件不重复计数。
+- `total = input + output + cacheRead + cacheWrite`；`reasoning` 单列（若 provider 上报）。
+- 缓存命中率 = `cacheRead / (cacheRead + input)`；provider 不上报缓存时显示 "—"。
+
+## 数据流
+
+1. 打开设置页 → 浏览器 `fetch /usage-lite/stats`。
+2. Host 检查索引（4s TTL 单飞行扫描）：`listSessions()` 对比持久化日志 mtime，只重读新增/变更
+   （live 会话每次都重读内存快照）。
+3. 增量索引快照落盘 `~/.dsh/usage-lite/index.json`（10s 节流，原子写，版本化，坏文件从空开始）。
+4. 响应聚合快照：`totals` / `days`（按天）/ `models`（按模型）/ `workspaces`（按工作区）/
+   `cells`（按天×模型，供前端按时间范围重切）。
+
+## 文件
+
+| 文件 | 角色 |
+|---|---|
+| `index.mjs` | Host 半：折叠会话日志里的用量样本，维护增量索引，暴露 `GET /usage-lite/stats`（inject `webServer` + `sessionQuery`） |
+| `client.js` | 浏览器半：Settings 面板的「用量统计」页（手工 bundle，只 require 平台种子模块 `react`；inject `slots` 服务，注册进 `settings.section` 槽位） |
+| `cordis.patch.yml` | bundle 挂载模板（`- insert:` 条目） |
+| `package.json` | `dsh.bundle.patch` + `dsh.client` 声明 |
+
+## 维护注意
+
+- 客户端 bundle **只能 require 平台种子模块**（`react`、`react-dom`、`@deepseek-ai/cordis`、
+  `dsh-client-store`、`dsh-client-ui-slots`、`dsh-client-ui-primitives`、`dsh-client-ui-dockkit`）。
+- client 的 `exports.inject` 必须是**服务名** `["slots"]`（不是包名）；写错会导致 web boot
+  判定 "entry did not activate" 并拒绝启动，桌面版连续失败后会触发恢复流程重置 profile patch。
+- 升级 DSH 版本后若设置页空白，先看 Settings → Plugins → Plugin list 的装载审计信息。
+- 移除插件：`dsh plugin remove dsh-usage-lite`，或删掉 patch 里的 insert 行；
+  `~/.dsh/usage-lite/` 索引可一并删除。
+
+## License
+
+[MIT](./LICENSE)

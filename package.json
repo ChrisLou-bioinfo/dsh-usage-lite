@@ -1,0 +1,36 @@
+{
+  "name": "dsh-usage-lite",
+  "version": "1.0.0",
+  "description": "Token usage statistics across all sessions, rendered as a DeepSeek Harness settings page",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChrisLou-bioinfo/dsh-usage-lite.git"
+  },
+  "homepage": "https://github.com/ChrisLou-bioinfo/dsh-usage-lite#readme",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "token-usage",
+    "usage",
+    "statistics"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-slots"]
+    }
+  }
+}
