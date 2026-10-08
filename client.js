@@ -262,6 +262,75 @@ window.__ModuleLoader__.load({
 					e(WorkspaceTable, { workspaces: view.workspaces })));
 		}
 
+		// ── 设置页导航图标 ─────────────────────────────────────────────────────
+		// 宿主 ui-settings-general 的 navIcon(id) 按 id 硬编码图标，第三方分区一律
+		// 回落齿轮 ⇒ 与「设置」撞色。settings.section 槽位契约只有 id/order/label，
+		// 没有 icon 字段。解法（与 dsh-usage-heatmap 等生态插件一致）：按本插件的
+		// label 文本认领自己那一行、打 data 标记，再用独立样式表把齿轮换成柱状图
+		// （CSS mask 只读 alpha，颜色用 currentColor 自动跟随 hover/active 主题色）。
+		// 只标记可见文本与 label 完全相等的那一行，不碰外壳结构；宿主 DOM 变化时静默失效。
+		var NAV_ICON_MARKER = "data-ul-nav-icon";
+		var NAV_ROW_SELECTOR = '[role="dialog"] nav button';
+		var NAV_ICON_MASK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='%23000'%3E%3Crect x='2' y='9' width='3.2' height='5' rx='.8'/%3E%3Crect x='6.4' y='5' width='3.2' height='9' rx='.8'/%3E%3Crect x='10.8' y='2' width='3.2' height='12' rx='.8'/%3E%3C/g%3E%3C/svg%3E\")";
+		function navIconCss() {
+			return [
+				"[" + NAV_ICON_MARKER + "] > svg { display: none; }",
+				"[" + NAV_ICON_MARKER + "]::before {",
+				"  content: '';",
+				"  flex: none;",
+				"  width: 16px;",
+				"  height: 16px;",
+				"  background-color: currentColor;",
+				"  -webkit-mask-image: " + NAV_ICON_MASK + ";",
+				"  mask-image: " + NAV_ICON_MASK + ";",
+				"  -webkit-mask-repeat: no-repeat;",
+				"  mask-repeat: no-repeat;",
+				"  -webkit-mask-position: center;",
+				"  mask-position: center;",
+				"  -webkit-mask-size: 16px 16px;",
+				"  mask-size: 16px 16px;",
+				"}"
+			].join("\n");
+		}
+		function installNavIcon() {
+			if (typeof document === "undefined" || !document.body) return function () {};
+			var tag = document.createElement("style");
+			tag.id = "ul-usage-lite-nav-icon-style";
+			tag.textContent = navIconCss();
+			document.head.appendChild(tag);
+			var disposed = false;
+			var scheduled = false;
+			function sync() {
+				scheduled = false;
+				if (disposed) return;
+				if (!document.querySelector('[role="dialog"]')) return;
+				var rows = document.querySelectorAll(NAV_ROW_SELECTOR);
+				for (var i = 0; i < rows.length; i++) {
+					var row = rows[i];
+					if (String(row.textContent || "").trim() === "用量统计") row.setAttribute(NAV_ICON_MARKER, "");
+					else row.removeAttribute(NAV_ICON_MARKER);
+				}
+			}
+			function schedule() {
+				if (scheduled || disposed) return;
+				scheduled = true;
+				(typeof queueMicrotask === "function" ? queueMicrotask : function (f) { setTimeout(f, 0); })(sync);
+			}
+			sync();
+			var observer = null;
+			try {
+				observer = new MutationObserver(schedule);
+				observer.observe(document.body, { childList: true, subtree: true });
+			} catch {}
+			return function () {
+				disposed = true;
+				try { if (observer) observer.disconnect(); } catch {}
+				var marked = document.querySelectorAll("[" + NAV_ICON_MARKER + "]");
+				for (var i = 0; i < marked.length; i++) try { marked[i].removeAttribute(NAV_ICON_MARKER); } catch {}
+				try { tag.remove(); } catch {}
+			};
+		}
+
 		// ── 注册 ─────────────────────────────────────────────────────────────
 		function apply(ctx) {
 			try {
@@ -274,6 +343,8 @@ window.__ModuleLoader__.load({
 			} catch (error) {
 				console.error("[dsh-usage-lite] failed to register settings section", error);
 			}
+			if (ctx.effect) ctx.effect(() => installNavIcon(), "dsh-usage-lite: settings nav icon");
+			else installNavIcon();
 		}
 
 		const inject = ["slots"];
